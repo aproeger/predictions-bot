@@ -1,0 +1,6 @@
+/.env
+/.vscode
+/bot-old.py
+/predictions.db
+/venv
+/__pycache__
