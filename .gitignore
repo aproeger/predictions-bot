@@ -1,6 +1,7 @@
-/.env
-/.vscode
-/bot-old.py
-/predictions.db
-/venv
-/__pycache__
+.env
+.vscode
+database.db
+venv
+__pycache__
+classes/__pycache__
+cogs/__pycache__
