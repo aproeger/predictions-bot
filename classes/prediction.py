@@ -9,8 +9,8 @@ class Prediction:
         fighter_b=str,
         event_name=str,
         event_date=str,
-        discord_message_id=int,
-        discord_channel_id=int,
+        discord_message_id=None,
+        discord_channel_id=None,
         prediction_id=None,
     ):
         self.connection = connection
