@@ -6,8 +6,9 @@ from classes.database import Database
 load_dotenv()
 
 TOKEN: str = str(env.get("BOT_TOKEN"))
+DATABASE_URL: str = str(env.get("DATABASE_URL"))
 
-db = Database("database.db")
+db = Database(dsn=DATABASE_URL)
 
 intents = interactions.Intents.DEFAULT | interactions.Intents.GUILDS | interactions.Intents.MESSAGE_CONTENT
 client = interactions.Client(intents=intents)
@@ -16,6 +17,8 @@ client = interactions.Client(intents=intents)
 @interactions.listen()
 async def on_startup():
     await db.connect()
+    await db.execute_sql_file("init_database.sql")
+
     client.db = db
     print(f"We're online! We've logged in as {client.app.name}.")
 

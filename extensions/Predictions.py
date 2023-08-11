@@ -39,11 +39,13 @@ class Predictions(Extension):
         if prediction.locked == True:
             description += f"\n\n‼️ **This prediction is locked, no further votes can be placed.** ‼️"
 
+        images = [prediction.image_url] if prediction.image_url is not None else []
+
         return Embed(
             title=f"Community Prediction started! [#{prediction.id}]",
             description=description,
             color=0xDC3545,
-            images=[prediction.image],
+            images=images,
             fields=[
                 EmbedField(name="Event", value=str(prediction.event_name), inline=True),
                 EmbedField(name="Event Date", value=str(prediction.event_date), inline=True),
@@ -88,14 +90,14 @@ class Predictions(Extension):
         image_url: str = None,
     ):
         prediction = Prediction(
-            connection=self.client.db.connection,
+            db=self.client.db,
             active=True,
             locked=False,
             fighter_a=fighter_a,
             fighter_b=fighter_b,
             event_name=event_name,
             event_date=event_date,
-            image=image_url,
+            image_url=image_url,
         )
 
         await prediction.save()
@@ -158,7 +160,7 @@ class Predictions(Extension):
         prediction_id: int,
     ):
         prediction = Prediction(
-            connection=self.client.db.connection, prediction_id=prediction_id
+            db=self.client.db, prediction_id=prediction_id
         )
 
         await prediction.load()
@@ -213,7 +215,7 @@ class Predictions(Extension):
 
         else:
             prediction = Prediction(
-                connection=self.client.db.connection, prediction_id=prediction_id
+                db=self.client.db, prediction_id=prediction_id
             )
             await prediction.load()
 
@@ -240,7 +242,7 @@ class Predictions(Extension):
 
                 for participant in participans:
                     user = User(
-                        connection=self.client.db.connection, user_id=participant[0]
+                        db=self.client.db, user_id=participant[0]
                     )
                     await user.load()
 
@@ -299,7 +301,7 @@ class Predictions(Extension):
         prediction_id: int,
     ):
         prediction = Prediction(
-            connection=self.client.db.connection, prediction_id=prediction_id
+            db=self.client.db, prediction_id=prediction_id
         )
         await prediction.load()
         await prediction.delete()
@@ -324,20 +326,20 @@ class Predictions(Extension):
 
         else:
             prediction = Prediction(
-                connection=self.client.db.connection,
+                db=self.client.db,
                 discord_message_id=event.ctx.message.id,
             )
             await prediction.load()
 
             user = User(
-                connection=self.client.db.connection, discord_id=event.ctx.author.id
+                db=self.client.db, discord_id=event.ctx.author.id
             )
 
             if await user.load() == None:
                 await user.save()
 
             relation = PredictionUser(
-                connection=self.client.db.connection, prediction=prediction, user=user
+                db=self.client.db, prediction=prediction, user=user
             )
 
             custom_id = event.ctx.custom_id

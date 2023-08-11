@@ -1,11 +1,13 @@
+from classes.database import Database
+
 class User:
     def __init__(
         self,
-        connection,
+        db: Database,
         discord_id=None,
         user_id=None,
     ):
-        self.connection = connection
+        self.db = db
         self.discord_id = discord_id
         self.id = user_id
         self.participations = 0
@@ -21,7 +23,7 @@ class User:
                 return existing_user.id
 
             query = (
-                "INSERT INTO users (discord_id, participations, wins) VALUES (?, ?, ?);"
+                "INSERT INTO users (discord_id, participations, wins) VALUES ($1, $2, $3) RETURNING id;"
             )
             data_to_insert = (
                 self.discord_id,
@@ -29,27 +31,26 @@ class User:
                 0,
             )
 
-            async with self.connection.execute(query, data_to_insert) as cursor:
-                await self.connection.commit()
-                self.id = cursor.lastrowid
-                print(f"User with ID {self.id} successfully saved in the database.")
-                return self.id
+            result = await self.db.fetch_data(query, *data_to_insert)
+            self.id = result[0][0]
+            await self.db.commit()
+            print(f"User with ID {self.id} successfully saved in the database.")
+            return self.id
         except Exception as e:
-            await self.connection.rollback()
+            await self.db.rollback()
             print("Error while saving the user to the database:", e)
 
     async def load(self):
         try:
             if self.id:
-                query = "SELECT * FROM users WHERE id = ?;"
-                async with self.connection.execute(query, (self.id,)) as cursor:
-                    row = await cursor.fetchone()
+                query = "SELECT * FROM users WHERE id = $1;"
+                row = await self.db.fetch_data(query, self.id)
             else:
-                query = "SELECT * FROM users WHERE discord_id = ?;"
-                async with self.connection.execute(query, (self.discord_id,)) as cursor:
-                    row = await cursor.fetchone()
+                query = "SELECT * FROM users WHERE discord_id = $1;"
+                row = await self.db.fetch_data(query, self.discord_id)
 
             if row:
+                row = row[0]
                 self.id = row[0]
                 self.discord_id = row[1]
                 self.participations = row[2]
@@ -66,24 +67,24 @@ class User:
 
     async def update(self, **kwargs):
         try:
-            set_values = ", ".join(f"{key} = ?" for key in kwargs.keys())
-            query = f"UPDATE users SET {set_values} WHERE id = ?;"
+            set_values = ", ".join(f"{key} = ${i+1}" for i, key in enumerate(kwargs.keys()))
+            query = f"UPDATE users SET {set_values} WHERE id = ${len(kwargs)+1};"
 
             data_to_update = list(kwargs.values()) + [self.id]
 
-            async with self.connection.execute(query, data_to_update) as cursor:
-                await self.connection.commit()
-                print(f"User with ID {self.id} successfully updated in the database.")
+            await self.db.execute_query(query, *data_to_update)
+            await self.db.commit()
+            print(f"User with ID {self.id} successfully updated in the database.")
         except Exception as e:
-            await self.connection.rollback()
+            await self.db.rollback()
             print("Error while updating the user in the database:", e)
 
     async def delete(self):
         try:
-            query = "DELETE FROM users WHERE id = ?;"
-            async with self.connection.execute(query, (self.id,)) as cursor:
-                await self.connection.commit()
-                print(f"User with ID {self.id} successfully deleted from the database.")
+            query = "DELETE FROM users WHERE id = $1;"
+            await self.db.execute_query(query, self.id)
+            await self.db.commit()
+            print(f"User with ID {self.id} successfully deleted from the database.")
         except Exception as e:
-            await self.connection.rollback()
+            await self.db.rollback()
             print("Error while deleting the user from the database:", e)
