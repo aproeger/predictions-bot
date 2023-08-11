@@ -77,7 +77,7 @@ class Predictions(Extension):
         "event_name", "Event in which the bout takes place.", 3, required=True
     )
     @slash_option("event_date", "Date of the event.", 3, required=True)
-    @slash_option("image_url", "Event image.", 3, required=True)
+    @slash_option("image_url", "Event image.", 3, required=False)
     async def start(
         self,
         ctx: SlashContext,
@@ -85,7 +85,7 @@ class Predictions(Extension):
         fighter_b: str,
         event_name: str,
         event_date: str,
-        image_url: str,
+        image_url: str = None,
     ):
         prediction = Prediction(
             connection=self.client.db.connection,
