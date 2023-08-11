@@ -1,8 +1,8 @@
 .env
 .vscode
-database.db
 venv
 __pycache__
 classes/__pycache__
 extensions/__pycache__
+utils/__pycache__
 fly.toml
