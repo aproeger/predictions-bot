@@ -17,12 +17,12 @@ from interactions.api.events import ButtonPressed
 from classes.prediction import Prediction
 from classes.user import User
 from classes.prediction_user import PredictionUser
+from utils.guilds import parse_guilds
 
 load_dotenv()
 
-GUILD_ID: int = int(env["GUILD_ID"])
-GUILD_IDS = [1096005107759460442,717696838362333224]
-
+GUILD_IDS = env["GUILD_IDS"]
+PARSED_GUILDS = parse_guilds(GUILD_IDS)
 
 class Predictions(Extension):
     def __init__(self, client):
@@ -62,7 +62,7 @@ class Predictions(Extension):
         )
 
     command_base = SlashCommand(
-        name="prediction", description="Prediction commands", scopes=GUILD_IDS
+        name="prediction", description="Prediction commands", scopes=PARSED_GUILDS
     )
 
     ## Start
