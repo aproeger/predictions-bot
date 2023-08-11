@@ -5,3 +5,4 @@ venv
 __pycache__
 classes/__pycache__
 extensions/__pycache__
+fly.toml
