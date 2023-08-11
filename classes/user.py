@@ -20,8 +20,14 @@ class User:
                 )
                 return existing_user.id
 
-            query = "INSERT INTO users (discord_id) VALUES (?);"
-            data_to_insert = (self.discord_id,)
+            query = (
+                "INSERT INTO users (discord_id, participations, wins) VALUES (?, ?, ?);"
+            )
+            data_to_insert = (
+                self.discord_id,
+                0,
+                0,
+            )
 
             async with self.connection.execute(query, data_to_insert) as cursor:
                 await self.connection.commit()
@@ -34,8 +40,7 @@ class User:
 
     async def load(self):
         try:
-
-            if(self.id):
+            if self.id:
                 query = "SELECT * FROM users WHERE id = ?;"
                 async with self.connection.execute(query, (self.id,)) as cursor:
                     row = await cursor.fetchone()
