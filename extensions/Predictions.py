@@ -21,6 +21,7 @@ from classes.prediction_user import PredictionUser
 load_dotenv()
 
 GUILD_ID: int = int(env["GUILD_ID"])
+GUILD_IDS = [1096005107759460442,717696838362333224]
 
 
 class Predictions(Extension):
@@ -44,24 +45,24 @@ class Predictions(Extension):
             color=0xDC3545,
             images=[prediction.image],
             fields=[
-                EmbedField(name="Event", value=prediction.event_name, inline=True),
-                EmbedField(name="Event Date", value=prediction.event_date, inline=True),
+                EmbedField(name="Event", value=str(prediction.event_name), inline=True),
+                EmbedField(name="Event Date", value=str(prediction.event_date), inline=True),
                 EmbedField(name="\u200B", value="\u200B", inline=True),
                 EmbedField(
                     name=f"Votes for {prediction.fighter_a}",
-                    value=f"{prediction.votes_a_percent}%",
+                    value=f"{round(prediction.votes_a_percent)}%",
                     inline=True,
                 ),
                 EmbedField(
                     name=f"Votes for {prediction.fighter_b}",
-                    value=f"{prediction.votes_b_percent}%",
+                    value=f"{round(prediction.votes_b_percent)}%",
                     inline=True,
                 ),
             ],
         )
 
     command_base = SlashCommand(
-        name="prediction", description="Prediction commands", scopes=[GUILD_ID]
+        name="prediction", description="Prediction commands", scopes=GUILD_IDS
     )
 
     ## Start
