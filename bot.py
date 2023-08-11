@@ -1,7 +1,6 @@
-import os, nextcord
+import os, interactions
 from dotenv import load_dotenv
 from os import environ as env
-from nextcord.ext import commands
 from classes.database import Database
 
 load_dotenv()
@@ -11,46 +10,47 @@ GUILD_ID: int = int(env.get("GUILD_ID"))
 
 db = Database("database.db")
 
-intents = nextcord.Intents.default()
-intents.members = True
-intents.message_content = True
-
-bot = commands.Bot(command_prefix="$", intents=intents)
-bot.test = "testo"
+intents = interactions.Intents.DEFAULT | interactions.Intents.GUILDS | interactions.Intents.MESSAGE_CONTENT
+client = interactions.Client(intents=intents)
 
 
-@bot.event
-async def on_ready():
+@interactions.listen()
+async def on_startup():
     await db.connect()
-    bot.db = db
-    print(f"Logged in as {bot.user} (ID: {bot.user.id})")
+    client.db = db
+    print(f"We're online! We've logged in as {client.app.name}.")
+
+@interactions.listen()
+async def on_ready():
+    print("Ready")
+    print(f"This bot is owned by {client.owner}")
 
 
-## auto-load extensions
+# auto-load extensions
 
 
 initial_extensions = []
 
-for filename in os.listdir("./cogs"):
+for filename in os.listdir("./extensions"):
     if filename.endswith(".py"):
-        initial_extensions.append("cogs." + filename[:-3])
+        initial_extensions.append("extensions." + filename[:-3])
 
 if __name__ == "__main__":
     for extension in initial_extensions:
         try:
-            bot.load_extension(extension)
+            client.load_extension(extension)
             print(f"Extension {extension} loaded.")
         except Exception as e:
             print("Error loading extension:", e)
 
 
-@bot.command()
-async def reload(ctx, extension):
-    try:
-        bot.reload_extension(f"cogs.{extension}")
-        await ctx.send(f"Extension {extension} reloaded.")
-    except Exception as e:
-        await ctx.send("Error loading extension:", e)
+# @bot.command()
+# async def reload(ctx, extension):
+#     try:
+#         bot.reload_extension(f"cogs.{extension}")
+#         await ctx.send(f"Extension {extension} reloaded.")
+#     except Exception as e:
+#         await ctx.send("Error loading extension:", e)
 
 
-bot.run(TOKEN)
+client.start(TOKEN)

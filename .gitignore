@@ -4,4 +4,4 @@ database.db
 venv
 __pycache__
 classes/__pycache__
-cogs/__pycache__
+extensions/__pycache__
