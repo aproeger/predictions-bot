@@ -88,3 +88,30 @@ class User:
         except Exception as e:
             await self.db.rollback()
             print("Error while deleting the user from the database:", e)
+
+    @staticmethod
+    async def get_top10_users(db: Database):
+        try:
+            query = "SELECT * FROM users ORDER BY wins DESC LIMIT 10;"
+            users = await db.fetch_data(query)
+            return users
+        except Exception as e:
+            print("Error while getting top10 users:", e)
+            return []
+        
+    @staticmethod
+    async def get_user_leaderboard_position(db: Database, discord_id: int):
+        try:
+            query = "SELECT position FROM (SELECT discord_id, RANK() OVER (ORDER BY wins DESC) as position FROM users) as ranked_users WHERE discord_id = $1;"
+            result = await db.fetch_data(query, discord_id)
+
+            print("Leaderboard", result)
+
+            if result:
+                return result[0]["position"]
+            else:
+                return None
+
+        except Exception as e:
+            print("Error while getting user leaderboard position:", e)
+            return None

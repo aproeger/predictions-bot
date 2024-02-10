@@ -5,17 +5,18 @@ class Prediction:
     def __init__(
         self,
         db: Database,
-        active=True,
-        locked=True,
-        fighter_a=str,
-        fighter_b=str,
-        event_name=str,
-        event_date=str,
-        image_url=None,
-        discord_message_id=None,
-        discord_channel_id=None,
-        prediction_id=None,
+        active: bool = True,
+        locked: bool = False,
+        fighter_a: str = None,
+        fighter_b: str = None,
+        event_name: str = None,
+        event_date: str = None,
+        image_url: str = None,
+        discord_message_id: int = 0,
+        discord_channel_id: int = 0,
+        prediction_id: int = 0,
     ):
+        self.id = prediction_id
         self.db = db
         self.active = active
         self.locked = locked
@@ -26,7 +27,6 @@ class Prediction:
         self.image_url = image_url
         self.discord_message_id = discord_message_id
         self.discord_channel_id = discord_channel_id
-        self.id = prediction_id
         self.winner = None
         self.method = None
         self.votes_a = 0
@@ -34,6 +34,8 @@ class Prediction:
         self.votes_draw = 0
         self.votes_a_percent = 0
         self.votes_b_percent = 0
+        self.votes_draw_percent = 0
+        self.votes_total = 0
 
     async def save(self):
         try:
@@ -63,10 +65,10 @@ class Prediction:
         try:
             if self.discord_message_id:
                 query = "SELECT * FROM predictions WHERE discord_message_id = $1;"
-                row = await self.db.fetch_data(query, self.discord_message_id)
+                row = await self.db.fetch_data(query, int(self.discord_message_id))
             elif self.id:
                 query = "SELECT * FROM predictions WHERE id = $1;"
-                row = await self.db.fetch_data(query, self.id)
+                row = await self.db.fetch_data(query, int(self.id))
             else:
                 raise Exception("id and discord_message_id not defined.")
 
@@ -79,12 +81,14 @@ class Prediction:
                 self.fighter_b = row[4]
                 self.event_name = row[5]
                 self.event_date = row[6]
-                self.image = row[7]
+                self.image_url = row[7]
                 self.discord_message_id = row[8]
                 self.discord_channel_id = row[9]
                 print(f"Prediction with ID {self.id} loaded from the database.")
+                return True
             else:
                 print(f"Prediction with ID {self.id} not found.")
+                return False
         except Exception as e:
             print("Error while loading the prediction from the database:", e)
 
@@ -107,7 +111,7 @@ class Prediction:
     async def delete(self):
         try:
             query = "DELETE FROM predictions WHERE id = $1;"
-            await self.db.execute_query(query, self.id)
+            await self.db.execute_query(query, int(self.id))
             await self.db.commit()
             print(
                 f"Prediction with ID {self.id} successfully deleted from the database."
@@ -115,34 +119,26 @@ class Prediction:
         except Exception as e:
             await self.db.rollback()
 
-        try:
-            query = "DELETE FROM prediction_users WHERE prediction_id = $1;"
-            await self.db.execute_query(query, self.id)
-            await self.db.commit()
-            print(
-                f"All relations for prediction with ID {self.id} successfully deleted from the database."
-            )
-        except Exception as e:
-            await self.db.rollback()
-            print("Error while deleting the prediction relations from the database:", e)
-
     async def load_votes_and_percentages(self):
         try:
             query = "SELECT fighter, COUNT(*) FROM prediction_users WHERE prediction_id = $1 GROUP BY fighter;"
-            rows = await self.db.fetch_data(query, self.id)
+            rows = await self.db.fetch_data(query, int(self.id))
 
-            total_votes = 0
+            self.total_votes = 0
             for row in rows:
                 fighter, count = row
-                total_votes += count
+                self.total_votes += count
                 if fighter == "a":
                     self.votes_a = count
                 elif fighter == "b":
                     self.votes_b = count
+                else:
+                    self.votes_draw = count
 
-            if total_votes > 0:
-                self.votes_a_percent = (self.votes_a / total_votes) * 100
-                self.votes_b_percent = (self.votes_b / total_votes) * 100
+            if self.total_votes > 0:
+                self.votes_a_percent = (self.votes_a / self.total_votes) * 100
+                self.votes_b_percent = (self.votes_b / self.total_votes) * 100
+                self.votes_draw_percent = (self.votes_draw / self.total_votes) * 100
 
             print(f"Votes and percentages loaded for Prediction with ID {self.id}.")
         except Exception as e:
@@ -151,10 +147,20 @@ class Prediction:
     async def get_participants(self):
         try:
             query = "SELECT user_id, fighter, method FROM prediction_users WHERE prediction_id = $1;"
-            rows = await self.db.fetch_data(query, self.id)
+            rows = await self.db.fetch_data(query, int(self.id))
 
             return rows
         except Exception as e:
             print(
                 "Error while retrieving users with correct votes from the database:", e
             )
+
+    @staticmethod
+    async def get_active_predictions(db: Database):
+        try:
+            query = "SELECT * FROM predictions WHERE active = true;"
+            active_predictions = await db.fetch_data(query)
+            return active_predictions
+        except Exception as e:
+            print("Error while getting active predictions:", e)
+            return []

@@ -8,9 +8,14 @@ load_dotenv()
 TOKEN: str = str(env.get("BOT_TOKEN"))
 DATABASE_URL: str = str(env.get("DATABASE_URL"))
 
+
 db = Database(dsn=DATABASE_URL)
 
-intents = interactions.Intents.DEFAULT | interactions.Intents.GUILDS | interactions.Intents.MESSAGE_CONTENT
+intents = (
+    interactions.Intents.DEFAULT
+    | interactions.Intents.GUILDS
+    | interactions.Intents.MESSAGE_CONTENT
+)
 client = interactions.Client(intents=intents)
 
 
@@ -22,6 +27,7 @@ async def on_startup():
     client.db = db
     print(f"We're online! We've logged in as {client.app.name}.")
 
+
 @interactions.listen()
 async def on_ready():
     print("Ready")
@@ -29,7 +35,6 @@ async def on_ready():
 
 
 # auto-load extensions
-
 
 initial_extensions = []
 
@@ -44,6 +49,5 @@ if __name__ == "__main__":
             print(f"Extension {extension} loaded.")
         except Exception as e:
             print("Error loading extension:", e)
-
 
 client.start(TOKEN)

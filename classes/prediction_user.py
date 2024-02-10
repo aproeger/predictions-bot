@@ -1,10 +1,14 @@
 from classes.database import Database
+from classes.prediction import Prediction
+from classes.user import User
 
 class PredictionUser:
     def __init__(self, db, prediction, user):
         self.db: Database = db
-        self.prediction = prediction
-        self.user = user
+        self.prediction: Prediction = prediction
+        self.user: User = user
+        self.fighter = None
+        self.method = None
 
     async def save(self, fighter=None, method=str):
         try:
@@ -50,3 +54,26 @@ class PredictionUser:
         except Exception as e:
             await self.db.rollback()
             print("Error while deleting the Prediction-User relationship:", e)
+
+    async def load(self):
+        try:
+            query = (
+                "SELECT fighter, method FROM prediction_users WHERE prediction_id = $1 AND user_id = $2;"
+            )
+            data_to_select = (self.prediction.id, self.user.id)
+
+            result = await self.db.fetch_data(query, *data_to_select)
+
+            if result:
+                self.fighter = result[0][0]
+                self.method = result[0][1]
+                print("Prediction-User relationship successfully loaded from the database.")
+                return self
+            else:
+                print("No Prediction-User relationship found for the given prediction and user.")
+                return False
+
+        except Exception as e:
+            print("Error while loading the Prediction-User relationship:", e)
+            return False
+        
