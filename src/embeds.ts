@@ -50,9 +50,16 @@ function formatWithBase(base: string, pathOrFilename: string): string {
   return `${base}/${clean}`
 }
 
-export function resolveImageUrl(rawUrl?: string | null): string | null {
-  if (!rawUrl || typeof rawUrl !== 'string') return null
-  const trimmed = rawUrl.trim()
+export function resolveImageUrl(rawUrl?: any): string | null {
+  if (!rawUrl) return null
+  let trimmed: string = ''
+  if (typeof rawUrl === 'string') {
+    trimmed = rawUrl.trim()
+  } else if (typeof rawUrl === 'object' && rawUrl.url && typeof rawUrl.url === 'string') {
+    trimmed = rawUrl.url.trim()
+  } else {
+    return null
+  }
   if (!trimmed) return null
 
   const publicBase = (process.env.PUBLIC_MEDIA_URL || '').trim().replace(/\/+$/, '')
@@ -182,7 +189,8 @@ export function buildPredictionEmbed(
     })
     .setTimestamp()
 
-  const resolvedImage = resolveImageUrl(prediction.image_url)
+  const rawImage = prediction.image_url || (prediction as any).image
+  const resolvedImage = resolveImageUrl(rawImage)
   if (resolvedImage) {
     embed.setImage(resolvedImage)
   }
@@ -217,7 +225,8 @@ export function buildEndedEmbed(
     })
     .setTimestamp()
 
-  const resolvedImage = resolveImageUrl(prediction.image_url)
+  const rawImage = prediction.image_url || (prediction as any).image
+  const resolvedImage = resolveImageUrl(rawImage)
   if (resolvedImage) {
     embed.setThumbnail(resolvedImage)
   }
