@@ -36,8 +36,7 @@ COPY --from=builder --chown=botuser:nodejs /app/src ./src
 
 USER botuser
 
-EXPOSE 8081
-
+# Intentionally no EXPOSE / public port mapping: only reachable on the internal Docker network (port 8081)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD wget -q --spider http://127.0.0.1:${BOT_WEBHOOK_PORT:-8081}/health || exit 1
 
