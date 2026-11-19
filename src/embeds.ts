@@ -2,7 +2,16 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  ContainerBuilder,
   EmbedBuilder,
+  MediaGalleryBuilder,
+  MediaGalleryItemBuilder,
+  MessageFlags,
+  SectionBuilder,
+  SeparatorBuilder,
+  SeparatorSpacingSize,
+  TextDisplayBuilder,
+  ThumbnailBuilder,
 } from 'discord.js'
 import type { PredictionDoc, SettlementResult, VoteStats } from './api.js'
 
@@ -16,6 +25,29 @@ function renderProgressBar(percent: number, filledChar: string, length = 10): st
   const filled = Math.round((clamped / 100) * length)
   const empty = length - filled
   return `${filledChar.repeat(filled)}${'⬛'.repeat(empty)}`
+}
+
+function renderModernBar(percent: number, length = 10): string {
+  const clamped = Math.max(0, Math.min(100, Math.round(percent)))
+  const filled = Math.round((clamped / 100) * length)
+  const empty = length - filled
+  return `\`${'█'.repeat(filled)}${'░'.repeat(empty)}\``
+}
+
+function formatEventDate(rawDate?: string | null): string {
+  if (!rawDate) return '-'
+  const trimmed = String(rawDate).trim()
+  if (!trimmed) return '-'
+
+  // Parse YYYY-MM-DD or ISO date into a noon UTC timestamp so date display doesn't shift across timezones
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (isoMatch) {
+    const unix = Math.floor(
+      Date.UTC(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]), 12, 0, 0) / 1000,
+    )
+    return `<t:${unix}:D>`
+  }
+  return trimmed
 }
 
 export function getWebUrl(): string | null {
@@ -299,4 +331,173 @@ export function buildEndedEmbed(
 
   embed.setDescription(descriptionParts.join('\n'))
   return embed
+}
+
+export function buildPredictionMessagePayload(
+  prediction: PredictionDoc,
+  overrideStats?: VoteStats,
+  options?: { includeButtons?: boolean },
+) {
+  const stats = overrideStats || prediction.stats || {
+    votes_a: 0,
+    votes_b: 0,
+    votes_draw: 0,
+    total_votes: 0,
+    votes_a_percent: 0,
+    votes_b_percent: 0,
+    votes_draw_percent: 0,
+  }
+
+  const isLocked = prediction.status === 'locked'
+  const includeButtons = options?.includeButtons ?? !isLocked
+  const pctA = Math.round(stats.votes_a_percent)
+  const pctB = Math.round(stats.votes_b_percent)
+  const pctDraw = Math.round(stats.votes_draw_percent)
+
+  const headerText = new TextDisplayBuilder().setContent(
+    [
+      '-# BEYOND KICKBOXING • COMMUNITY PREDICTIONS',
+      isLocked
+        ? `## 🔒 ${prediction.fighter_a}  vs.  ${prediction.fighter_b}`
+        : `## 🥊 ${prediction.fighter_a}  vs.  ${prediction.fighter_b}`,
+      `**Event:** ${prediction.event_name || '-'}  •  **Date:** ${formatEventDate(prediction.event_date)}  •  **Votes:** ${stats.total_votes}`,
+    ].join('\n'),
+  )
+
+  const voteLines = [
+    `🔴 **${prediction.fighter_a}**`,
+    `${renderModernBar(pctA)} **${pctA}%** *(${stats.votes_a} ${stats.votes_a === 1 ? 'vote' : 'votes'})*`,
+    '',
+    `🔵 **${prediction.fighter_b}**`,
+    `${renderModernBar(pctB)} **${pctB}%** *(${stats.votes_b} ${stats.votes_b === 1 ? 'vote' : 'votes'})*`,
+    '',
+    `⚪ **Draw / No Contest**`,
+    `${renderModernBar(pctDraw)} **${pctDraw}%** *(${stats.votes_draw} ${stats.votes_draw === 1 ? 'vote' : 'votes'})*`,
+  ]
+
+  if (isLocked) {
+    voteLines.push('', '> 🔒 **Voting is locked — no further votes can be placed.**')
+  }
+
+  const votesText = new TextDisplayBuilder().setContent(voteLines.join('\n'))
+
+  const container = new ContainerBuilder()
+    .setAccentColor(isLocked ? 0xf59e0b : 0xdc3545)
+    .addTextDisplayComponents(headerText)
+    .addSeparatorComponents(
+      new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small),
+    )
+    .addTextDisplayComponents(votesText)
+
+  const rawImage = prediction.image_url || (prediction as any).image
+  const resolvedImage = resolveImageUrl(rawImage)
+  if (resolvedImage) {
+    container.addMediaGalleryComponents(
+      new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(resolvedImage)),
+    )
+  }
+
+  if (includeButtons) {
+    container
+      .addSeparatorComponents(
+        new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small),
+      )
+      .addActionRowComponents(...buildPredictionComponents(prediction.fighter_a, prediction.fighter_b))
+  }
+
+  container.addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(
+      `-# Prediction #${prediction.id} • 2 pts exact (winner + method) • 1 pt winner or draw`,
+    ),
+  )
+
+  return {
+    components: [container],
+    flags: MessageFlags.IsComponentsV2 as const,
+  }
+}
+
+export function buildEndedMessagePayload(
+  prediction: PredictionDoc,
+  settlement?: SettlementResult,
+) {
+  let resultLine: string
+  if (prediction.method === 'draw') {
+    resultLine = '🤝 **Official Result:** Draw / No Contest'
+  } else {
+    const winnerName =
+      prediction.winner === 'a' ? prediction.fighter_a : prediction.fighter_b
+    const winMethod = prediction.method === 'ko' ? 'KO/TKO' : 'Decision'
+    resultLine = `🏆 **Official Result:** **${winnerName}** won by **${winMethod}**`
+  }
+
+  const headerLines = [
+    '-# BEYOND KICKBOXING • PREDICTION RESULT',
+    `## 🏁 ${prediction.fighter_a}  vs.  ${prediction.fighter_b}`,
+    resultLine,
+  ]
+
+  const container = new ContainerBuilder().setAccentColor(0x10b981)
+
+  const rawImage = prediction.image_url || (prediction as any).image
+  const resolvedImage = resolveImageUrl(rawImage)
+  if (resolvedImage) {
+    container.addSectionComponents(
+      new SectionBuilder()
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent(headerLines.join('\n')))
+        .setThumbnailAccessory(new ThumbnailBuilder().setURL(resolvedImage)),
+    )
+  } else {
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(headerLines.join('\n')))
+  }
+
+  const bodyLines: string[] = []
+  if (settlement) {
+    if (settlement.totalParticipants === 0) {
+      bodyLines.push('No one participated in this round.')
+    } else {
+      if (settlement.exactWinners.length > 0) {
+        bodyLines.push(`🎯 **Exact Match (+2 pts)**\n${formatMentions(settlement.exactWinners)}`)
+      }
+      if (settlement.winners.length > 0) {
+        if (bodyLines.length > 0) bodyLines.push('')
+        bodyLines.push(`✅ **Correct Winner / Draw (+1 pt)**\n${formatMentions(settlement.winners)}`)
+      }
+      if (settlement.exactWinners.length === 0 && settlement.winners.length === 0) {
+        bodyLines.push('😅 Argh! No one guessed right. Better luck next time!')
+      }
+    }
+  }
+
+  if (bodyLines.length > 0) {
+    container
+      .addSeparatorComponents(
+        new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small),
+      )
+      .addTextDisplayComponents(new TextDisplayBuilder().setContent(bodyLines.join('\n')))
+  }
+
+  const webUrl = getWebUrl()
+  if (webUrl) {
+    container.addActionRowComponents(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setLabel('View Leaderboard & History')
+          .setEmoji('🌐')
+          .setStyle(ButtonStyle.Link)
+          .setURL(`${webUrl}/leaderboard`),
+      ),
+    )
+  }
+
+  container.addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(
+      `-# Prediction #${prediction.id} • ${prediction.event_name || ''}`,
+    ),
+  )
+
+  return {
+    components: [container],
+    flags: MessageFlags.IsComponentsV2 as const,
+  }
 }

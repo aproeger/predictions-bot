@@ -12,9 +12,9 @@ import {
 import { ApiClient, ApiError } from './api.js'
 import { registerCommands } from './commands.js'
 import {
-  buildEndedEmbed,
-  buildPredictionComponents,
+  buildEndedMessagePayload,
   buildPredictionEmbed,
+  buildPredictionMessagePayload,
   getWebUrl,
 } from './embeds.js'
 import { startWebhookServer } from './webhook.js'
@@ -136,10 +136,9 @@ async function handleSlashCommand(interaction: ChatInputCommandInteraction) {
         event_date,
         image_url,
       })
-      const message = await interaction.editReply({
-        embeds: [buildPredictionEmbed(res.prediction)],
-        components: buildPredictionComponents(fighter_a, fighter_b),
-      })
+      const message = await interaction.editReply(
+        buildPredictionMessagePayload(res.prediction),
+      )
       await api.attachMessage(res.prediction.id, message.id, message.channelId)
     } catch (err: any) {
       await interaction.editReply(`Error creating prediction: ${err.message}`)
@@ -156,10 +155,16 @@ async function handleSlashCommand(interaction: ChatInputCommandInteraction) {
         res.prediction.discord_message_id,
       )
       if (msg) {
-        await msg.edit({
-          embeds: [buildPredictionEmbed(res.prediction)],
-          components: [],
-        })
+        if (msg.flags?.has(MessageFlags.IsComponentsV2)) {
+          await msg.edit(
+            buildPredictionMessagePayload(res.prediction, undefined, { includeButtons: false }),
+          )
+        } else {
+          await msg.edit({
+            embeds: [buildPredictionEmbed(res.prediction)],
+            components: [],
+          })
+        }
       }
       await interaction.reply({ content: 'Prediction locked.', flags: MessageFlags.Ephemeral })
     } catch (err: any) {
@@ -182,9 +187,7 @@ async function handleSlashCommand(interaction: ChatInputCommandInteraction) {
       )
       if (msg) await msg.delete()
 
-      await interaction.editReply({
-        embeds: [buildEndedEmbed(res.prediction, res.settlement)],
-      })
+      await interaction.editReply(buildEndedMessagePayload(res.prediction, res.settlement))
     } catch (err: any) {
       await interaction.editReply(err.message)
     }
@@ -303,9 +306,15 @@ async function handleButton(interaction: ButtonInteraction) {
 
     await interaction.reply({ content: replyText, flags: MessageFlags.Ephemeral })
     try {
-      await interaction.message.edit({
-        embeds: [buildPredictionEmbed(prediction, voteRes.stats)],
-      })
+      if (interaction.message.flags?.has(MessageFlags.IsComponentsV2)) {
+        await interaction.message.edit(
+          buildPredictionMessagePayload(prediction, voteRes.stats),
+        )
+      } else {
+        await interaction.message.edit({
+          embeds: [buildPredictionEmbed(prediction, voteRes.stats)],
+        })
+      }
     } catch (editErr) {
       console.error('[button] Failed to edit prediction embed:', editErr)
     }

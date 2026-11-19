@@ -1,10 +1,11 @@
 import http from 'node:http'
-import type { Client, TextBasedChannel } from 'discord.js'
+import { MessageFlags, type Client, type TextBasedChannel } from 'discord.js'
 import type { ApiClient, PredictionDoc, SettlementResult, VoteStats } from './api.js'
 import {
-  buildEndedEmbed,
+  buildEndedMessagePayload,
   buildPredictionComponents,
   buildPredictionEmbed,
+  buildPredictionMessagePayload,
   resolveImageUrl,
 } from './embeds.js'
 
@@ -91,6 +92,25 @@ export function startWebhookServer(params: {
   return server
 }
 
+function extractExistingComponentImage(msg: any): string | null {
+  const walk = (comps: any[]): string | null => {
+    for (const c of comps) {
+      if (Array.isArray(c?.items)) {
+        for (const item of c.items) {
+          const url = item?.media?.url || item?.url
+          if (url && resolveImageUrl(url)) return url
+        }
+      }
+      if (Array.isArray(c?.components)) {
+        const nested = walk(c.components)
+        if (nested) return nested
+      }
+    }
+    return null
+  }
+  return Array.isArray(msg?.components) ? walk(msg.components) : null
+}
+
 function preserveEmbedImage(prediction: PredictionDoc, msg?: any): void {
   if (resolveImageUrl(prediction.image_url)) return
 
@@ -100,7 +120,7 @@ function preserveEmbedImage(prediction: PredictionDoc, msg?: any): void {
     return
   }
 
-  const currentEmbedImage = msg?.embeds?.[0]?.image?.url
+  const currentEmbedImage = msg?.embeds?.[0]?.image?.url || extractExistingComponentImage(msg)
   if (resolveImageUrl(currentEmbedImage)) {
     prediction.image_url = currentEmbedImage
   }
@@ -120,10 +140,7 @@ async function handleWebhook(
     const channel = await client.channels.fetch(defaultChannelId)
     if (!channel || !channel.isTextBased() || !('send' in channel)) return
 
-    const message = await channel.send({
-      embeds: [buildPredictionEmbed(prediction, data.stats)],
-      components: buildPredictionComponents(prediction.fighter_a, prediction.fighter_b),
-    })
+    const message = await channel.send(buildPredictionMessagePayload(prediction, data.stats))
 
     await api.attachMessage(prediction.id, message.id, channel.id)
     return
@@ -137,9 +154,13 @@ async function handleWebhook(
     )
     if (msg) {
       preserveEmbedImage(prediction, msg)
-      await msg.edit({
-        embeds: [buildPredictionEmbed(prediction, data.stats)],
-      })
+      if (msg.flags?.has(MessageFlags.IsComponentsV2)) {
+        await msg.edit(buildPredictionMessagePayload(prediction, data.stats))
+      } else {
+        await msg.edit({
+          embeds: [buildPredictionEmbed(prediction, data.stats)],
+        })
+      }
     }
     return
   }
@@ -154,10 +175,16 @@ async function handleWebhook(
     if (prediction.status === 'locked' && msg) {
       const fullRes = await api.getByMessage(prediction.discord_message_id!)
       preserveEmbedImage(fullRes.prediction, msg)
-      await msg.edit({
-        embeds: [buildPredictionEmbed(fullRes.prediction)],
-        components: [],
-      })
+      if (msg.flags?.has(MessageFlags.IsComponentsV2)) {
+        await msg.edit(
+          buildPredictionMessagePayload(fullRes.prediction, undefined, { includeButtons: false }),
+        )
+      } else {
+        await msg.edit({
+          embeds: [buildPredictionEmbed(fullRes.prediction)],
+          components: [],
+        })
+      }
     } else if (prediction.status === 'ended') {
       if (msg) {
         preserveEmbedImage(prediction, msg)
@@ -174,17 +201,19 @@ async function handleWebhook(
       if (targetChannelId) {
         const channel = await client.channels.fetch(targetChannelId)
         if (channel && channel.isTextBased() && 'send' in channel) {
-          await channel.send({
-            embeds: [buildEndedEmbed(prediction, data.settlement)],
-          })
+          await channel.send(buildEndedMessagePayload(prediction, data.settlement))
         }
       }
     } else if (prediction.status === 'active' && msg) {
       preserveEmbedImage(prediction, msg)
-      await msg.edit({
-        embeds: [buildPredictionEmbed(prediction, data.stats)],
-        components: buildPredictionComponents(prediction.fighter_a, prediction.fighter_b),
-      })
+      if (msg.flags?.has(MessageFlags.IsComponentsV2)) {
+        await msg.edit(buildPredictionMessagePayload(prediction, data.stats))
+      } else {
+        await msg.edit({
+          embeds: [buildPredictionEmbed(prediction, data.stats)],
+          components: buildPredictionComponents(prediction.fighter_a, prediction.fighter_b),
+        })
+      }
     }
     return
   }
