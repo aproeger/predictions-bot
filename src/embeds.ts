@@ -23,6 +23,55 @@ export function getWebUrl(): string | null {
   return /^https?:\/\//i.test(raw) ? raw : null
 }
 
+function formatWithBase(base: string, pathOrFilename: string): string {
+  const clean = pathOrFilename.replace(/^\/+/, '')
+
+  // If base already includes '/api/media/file' (e.g. https://beyondkick.com/_ipx/_/api/media/file)
+  if (base.endsWith('/api/media/file')) {
+    const filename = clean.replace(
+      /^(api\/media\/file\/|_ipx\/_\/api\/media\/file\/|uploads\/)/,
+      '',
+    )
+    return `${base}/${filename}`
+  }
+
+  // If pathOrFilename already contains 'api/media/file'
+  if (clean.startsWith('api/media/file/') || clean.startsWith('_ipx/')) {
+    const withoutIpx = clean.replace(/^_ipx\/_\//, '')
+    return `${base}/${withoutIpx}`
+  }
+
+  // If base is an _ipx endpoint without /api/media/file suffix, ensure /api/media/file/ is added
+  if (base.includes('/_ipx/')) {
+    const filename = clean.replace(/^(api\/media\/file\/|uploads\/)/, '')
+    return `${base}/api/media/file/${filename}`
+  }
+
+  return `${base}/${clean}`
+}
+
+export function resolveImageUrl(rawUrl?: string | null): string | null {
+  if (!rawUrl || typeof rawUrl !== 'string') return null
+  const trimmed = rawUrl.trim()
+  if (!trimmed) return null
+
+  const publicBase = (process.env.PUBLIC_MEDIA_URL || '').trim().replace(/\/+$/, '')
+
+  // If already an absolute http/https URL:
+  if (/^https?:\/\//i.test(trimmed)) {
+    // If pointing to localhost or 127.0.0.1, rewrite with public base if available (Discord cannot fetch localhost)
+    if (publicBase && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(trimmed)) {
+      const pathOnly = trimmed.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?/, '')
+      return formatWithBase(publicBase, pathOnly)
+    }
+    return trimmed
+  }
+
+  if (!publicBase) return null
+
+  return formatWithBase(publicBase, trimmed)
+}
+
 export function buildPredictionComponents(
   fighterA: string,
   fighterB: string,
@@ -133,8 +182,9 @@ export function buildPredictionEmbed(
     })
     .setTimestamp()
 
-  if (prediction.image_url && /^https?:\/\//i.test(prediction.image_url)) {
-    embed.setImage(prediction.image_url)
+  const resolvedImage = resolveImageUrl(prediction.image_url)
+  if (resolvedImage) {
+    embed.setImage(resolvedImage)
   }
 
   return embed
@@ -166,6 +216,11 @@ export function buildEndedEmbed(
       text: `Prediction #${prediction.id} • ${prediction.event_name || ''}`,
     })
     .setTimestamp()
+
+  const resolvedImage = resolveImageUrl(prediction.image_url)
+  if (resolvedImage) {
+    embed.setThumbnail(resolvedImage)
+  }
 
   const descriptionParts = [resultLine]
 
