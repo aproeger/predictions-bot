@@ -84,6 +84,11 @@ export function resolveImageUrl(rawUrl?: any): string | null {
   }
   if (!trimmed) return null
 
+  // Reject bare numeric Payload Media IDs (e.g. "4628") or URLs ending in a bare media ID (e.g. ".../api/media/file/4628")
+  if (/^\d+$/.test(trimmed) || /\/(?:api\/media\/file|uploads)\/\d+$/i.test(trimmed)) {
+    return null
+  }
+
   const publicBase = (process.env.PUBLIC_MEDIA_URL || '').trim().replace(/\/+$/, '')
 
   // If already an absolute http/https URL:

@@ -91,40 +91,18 @@ export function startWebhookServer(params: {
   return server
 }
 
-async function ensurePredictionImage(
-  prediction: PredictionDoc,
-  msg?: any,
-  api?: ApiClient,
-): Promise<void> {
-  // If prediction has image or image_url as an object or string
-  if (!prediction.image_url && (prediction as any).image) {
-    const raw = (prediction as any).image
-    prediction.image_url = typeof raw === 'object' ? raw?.url : String(raw)
-  }
-
-  // If prediction already resolves to a valid public image URL, nothing to do
+function preserveEmbedImage(prediction: PredictionDoc, msg?: any): void {
   if (resolveImageUrl(prediction.image_url)) return
 
-  // 1. Fallback: inherit existing image directly from the current Discord embed
-  const currentEmbedImage = msg?.embeds?.[0]?.image?.url
-  if (currentEmbedImage) {
-    prediction.image_url = currentEmbedImage
+  const imageField = (prediction as any).image
+  if (imageField && typeof imageField === 'object' && resolveImageUrl(imageField.url)) {
+    prediction.image_url = imageField.url
     return
   }
 
-  // 2. Fallback: query full prediction doc from backend API
-  if (api && prediction.discord_message_id) {
-    try {
-      const fullRes = await api.getByMessage(prediction.discord_message_id)
-      if (fullRes?.prediction?.image_url) {
-        prediction.image_url = fullRes.prediction.image_url
-      } else if ((fullRes?.prediction as any)?.image) {
-        const raw = (fullRes.prediction as any).image
-        prediction.image_url = typeof raw === 'object' ? raw?.url : String(raw)
-      }
-    } catch (err) {
-      console.warn('[webhook] Could not fetch full prediction for image fallback:', err)
-    }
+  const currentEmbedImage = msg?.embeds?.[0]?.image?.url
+  if (resolveImageUrl(currentEmbedImage)) {
+    prediction.image_url = currentEmbedImage
   }
 }
 
@@ -158,13 +136,7 @@ async function handleWebhook(
       prediction.discord_message_id,
     )
     if (msg) {
-      const rawImage = prediction.image_url
-      const existingEmbedImage = msg.embeds?.[0]?.image?.url
-      await ensurePredictionImage(prediction, msg, api)
-      const finalImage = resolveImageUrl(prediction.image_url || (prediction as any).image)
-      console.log(
-        `[webhook:voted] prediction=${prediction.id} rawImage=${JSON.stringify(rawImage)} existingEmbedImage=${JSON.stringify(existingEmbedImage)} finalImage=${JSON.stringify(finalImage)}`,
-      )
+      preserveEmbedImage(prediction, msg)
       await msg.edit({
         embeds: [buildPredictionEmbed(prediction, data.stats)],
       })
@@ -181,14 +153,14 @@ async function handleWebhook(
 
     if (prediction.status === 'locked' && msg) {
       const fullRes = await api.getByMessage(prediction.discord_message_id!)
-      await ensurePredictionImage(fullRes.prediction, msg, api)
+      preserveEmbedImage(fullRes.prediction, msg)
       await msg.edit({
         embeds: [buildPredictionEmbed(fullRes.prediction)],
         components: [],
       })
     } else if (prediction.status === 'ended') {
       if (msg) {
-        await ensurePredictionImage(prediction, msg, api)
+        preserveEmbedImage(prediction, msg)
         try {
           await msg.delete()
         } catch (delErr) {
@@ -208,7 +180,7 @@ async function handleWebhook(
         }
       }
     } else if (prediction.status === 'active' && msg) {
-      await ensurePredictionImage(prediction, msg, api)
+      preserveEmbedImage(prediction, msg)
       await msg.edit({
         embeds: [buildPredictionEmbed(prediction, data.stats)],
         components: buildPredictionComponents(prediction.fighter_a, prediction.fighter_b),
