@@ -5,6 +5,7 @@ import {
   buildEndedEmbed,
   buildPredictionComponents,
   buildPredictionEmbed,
+  resolveImageUrl,
 } from './embeds.js'
 
 interface WebhookPayload {
@@ -101,8 +102,8 @@ async function ensurePredictionImage(
     prediction.image_url = typeof raw === 'object' ? raw?.url : String(raw)
   }
 
-  // If prediction already has an image_url, nothing to do
-  if (prediction.image_url) return
+  // If prediction already resolves to a valid public image URL, nothing to do
+  if (resolveImageUrl(prediction.image_url)) return
 
   // 1. Fallback: inherit existing image directly from the current Discord embed
   const currentEmbedImage = msg?.embeds?.[0]?.image?.url
@@ -157,7 +158,13 @@ async function handleWebhook(
       prediction.discord_message_id,
     )
     if (msg) {
+      const rawImage = prediction.image_url
+      const existingEmbedImage = msg.embeds?.[0]?.image?.url
       await ensurePredictionImage(prediction, msg, api)
+      const finalImage = resolveImageUrl(prediction.image_url || (prediction as any).image)
+      console.log(
+        `[webhook:voted] prediction=${prediction.id} rawImage=${JSON.stringify(rawImage)} existingEmbedImage=${JSON.stringify(existingEmbedImage)} finalImage=${JSON.stringify(finalImage)}`,
+      )
       await msg.edit({
         embeds: [buildPredictionEmbed(prediction, data.stats)],
       })

@@ -50,6 +50,28 @@ function formatWithBase(base: string, pathOrFilename: string): string {
   return `${base}/${clean}`
 }
 
+function isInternalOrLocalUrl(urlStr: string): boolean {
+  try {
+    const parsed = new URL(urlStr)
+    const host = parsed.hostname.toLowerCase()
+    if (
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '0.0.0.0' ||
+      host === '::1' ||
+      !host.includes('.') || // Docker service names like "backend", "payload", "kicknews-backend"
+      /^10\./.test(host) ||
+      /^192\.168\./.test(host) ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+    ) {
+      return true
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
 export function resolveImageUrl(rawUrl?: any): string | null {
   if (!rawUrl) return null
   let trimmed: string = ''
@@ -66,10 +88,15 @@ export function resolveImageUrl(rawUrl?: any): string | null {
 
   // If already an absolute http/https URL:
   if (/^https?:\/\//i.test(trimmed)) {
-    // If pointing to localhost or 127.0.0.1, rewrite with public base if available (Discord cannot fetch localhost)
-    if (publicBase && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(trimmed)) {
-      const pathOnly = trimmed.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?/, '')
-      return formatWithBase(publicBase, pathOnly)
+    // If pointing to localhost, private IP, or internal Docker hostname, rewrite with public base if available
+    if (isInternalOrLocalUrl(trimmed)) {
+      if (!publicBase) return null
+      try {
+        const parsed = new URL(trimmed)
+        return formatWithBase(publicBase, parsed.pathname)
+      } catch {
+        return null
+      }
     }
     return trimmed
   }
