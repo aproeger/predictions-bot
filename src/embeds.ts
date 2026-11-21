@@ -55,6 +55,17 @@ export function getWebUrl(): string | null {
   return /^https?:\/\//i.test(raw) ? raw : null
 }
 
+export function getProfileUrl(user: {
+  discord_id: string
+  username?: string | null
+  display_name?: string | null
+}): string | null {
+  const webUrl = getWebUrl()
+  if (!webUrl) return null
+  const slug = user.display_name && user.username ? user.username : user.discord_id
+  return `${webUrl}/user/${encodeURIComponent(slug)}`
+}
+
 function formatWithBase(base: string, pathOrFilename: string): string {
   const clean = pathOrFilename.replace(/^\/+/, '')
 
@@ -262,8 +273,21 @@ export function buildPredictionEmbed(
   return embed
 }
 
-function formatMentions(winners: Array<{ discord_id: string; wins: number }>): string {
-  return winners.map((w) => `<@${w.discord_id}> (**${w.wins}** pts)`).join('\n')
+function formatMentions(
+  winners: Array<{
+    discord_id: string
+    username?: string | null
+    display_name?: string | null
+    wins: number
+  }>,
+): string {
+  return winners
+    .map((w) => {
+      const profileUrl = getProfileUrl(w)
+      const link = profileUrl ? ` [↗](${profileUrl})` : ''
+      return `<@${w.discord_id}> (**${w.wins}** pts)${link}`
+    })
+    .join('\n')
 }
 
 export function buildEndedEmbed(

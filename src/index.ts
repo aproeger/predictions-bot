@@ -15,6 +15,7 @@ import {
   buildEndedMessagePayload,
   buildPredictionEmbed,
   buildPredictionMessagePayload,
+  getProfileUrl,
   getWebUrl,
 } from './embeds.js'
 import { startWebhookServer } from './webhook.js'
@@ -78,10 +79,11 @@ async function handleSlashCommand(interaction: ChatInputCommandInteraction) {
           flags: MessageFlags.Ephemeral,
         })
       }
-      const lines = res.leaderboard.map(
-        (u) =>
-          `#${u.rank}: <@${u.discord_id}> with **${u.wins} points** (${u.participations} rounds played)`,
-      )
+      const lines = res.leaderboard.map((u) => {
+        const profileUrl = getProfileUrl(u)
+        const profileLink = profileUrl ? ` · [Profile](${profileUrl})` : ''
+        return `#${u.rank}: <@${u.discord_id}> with **${u.wins} points** (${u.participations} rounds played)${profileLink}`
+      })
       const webUrl = getWebUrl()
       const embed = new EmbedBuilder()
         .setTitle('Predictions Leaderboard')
@@ -103,8 +105,17 @@ async function handleSlashCommand(interaction: ChatInputCommandInteraction) {
     try {
       const res = await api.getMe(interaction.user.id)
       const webUrl = getWebUrl()
+      const profileUrl = getProfileUrl({
+        discord_id: interaction.user.id,
+        username: res.user.username || interaction.user.username,
+        display_name: res.user.display_name || interaction.user.globalName || interaction.user.username,
+      })
       const rankStr = res.user.rank ? `#${res.user.rank}` : 'unranked'
-      const webHint = webUrl ? `\n📊 [View My Votes & History](${webUrl}/my-votes)` : ''
+      const links = [
+        profileUrl ? `👤 [Public Profile](${profileUrl})` : null,
+        webUrl ? `📊 [My Votes & History](${webUrl}/my-votes)` : null,
+      ].filter(Boolean)
+      const webHint = links.length ? `\n${links.join(' · ')}` : ''
       return interaction.reply({
         content: `You are ranked **${rankStr}** with **${res.user.wins} points** (**${res.user.participations}** rounds played).${webHint}`,
         flags: MessageFlags.Ephemeral,
@@ -305,7 +316,19 @@ async function handleButton(interaction: ButtonInteraction) {
       method,
     })
 
-    await interaction.reply({ content: replyText, flags: MessageFlags.Ephemeral })
+    const webUrl = getWebUrl()
+    const profileUrl = getProfileUrl({
+      discord_id: interaction.user.id,
+      username: interaction.user.username,
+      display_name: interaction.user.globalName || interaction.user.username,
+    })
+    const voteLinks = [
+      profileUrl ? `👤 [Public Profile](${profileUrl})` : null,
+      webUrl ? `📊 [My Votes](${webUrl}/my-votes)` : null,
+    ].filter(Boolean)
+    const fullReply = voteLinks.length ? `${replyText}\n${voteLinks.join(' · ')}` : replyText
+
+    await interaction.reply({ content: fullReply, flags: MessageFlags.Ephemeral })
     try {
       if (interaction.message.flags?.has(MessageFlags.IsComponentsV2)) {
         await interaction.message.edit(

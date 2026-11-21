@@ -25,8 +25,18 @@ export interface PredictionDoc {
 }
 
 export interface SettlementResult {
-  exactWinners: Array<{ discord_id: string; username?: string | null; wins: number }>
-  winners: Array<{ discord_id: string; username?: string | null; wins: number }>
+  exactWinners: Array<{
+    discord_id: string
+    username?: string | null
+    display_name?: string | null
+    wins: number
+  }>
+  winners: Array<{
+    discord_id: string
+    username?: string | null
+    display_name?: string | null
+    wins: number
+  }>
   totalParticipants: number
 }
 
@@ -157,6 +167,7 @@ export class ApiClient {
         rank: number
         discord_id: string
         username: string | null
+        display_name?: string | null
         wins: number
         participations: number
       }>
@@ -167,7 +178,14 @@ export class ApiClient {
 
   getMe(discordId: string) {
     return this.request<{
-      user: { discord_id: string; wins: number; participations: number; rank: number | null }
+      user: {
+        discord_id: string
+        username?: string | null
+        display_name?: string | null
+        wins: number
+        participations: number
+        rank: number | null
+      }
     }>('GET', '/predictions-api/me', {
       params: { discord_id: discordId },
     })
