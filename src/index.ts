@@ -1,6 +1,9 @@
 import 'dotenv/config'
 import {
+  ActionRowBuilder,
+  ButtonBuilder,
   ButtonInteraction,
+  ButtonStyle,
   ChatInputCommandInteraction,
   Client,
   EmbedBuilder,
@@ -69,6 +72,36 @@ async function fetchMessage(channelId?: string | null, messageId?: string | null
   }
 }
 
+function buildUserLinksRow(
+  user: { discord_id: string; username?: string | null; display_name?: string | null },
+  myVotesLabel = 'My Votes',
+): ActionRowBuilder<ButtonBuilder> | null {
+  const webUrl = getWebUrl()
+  const profileUrl = getProfileUrl(user)
+  const buttons: ButtonBuilder[] = []
+
+  if (profileUrl) {
+    buttons.push(
+      new ButtonBuilder()
+        .setLabel('Public Profile')
+        .setEmoji('👤')
+        .setStyle(ButtonStyle.Link)
+        .setURL(profileUrl),
+    )
+  }
+  if (webUrl) {
+    buttons.push(
+      new ButtonBuilder()
+        .setLabel(myVotesLabel)
+        .setEmoji('📊')
+        .setStyle(ButtonStyle.Link)
+        .setURL(`${webUrl}/my-votes`),
+    )
+  }
+
+  return buttons.length > 0 ? new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons) : null
+}
+
 async function handleSlashCommand(interaction: ChatInputCommandInteraction) {
   if (interaction.commandName === 'leaderboard') {
     try {
@@ -104,20 +137,18 @@ async function handleSlashCommand(interaction: ChatInputCommandInteraction) {
   if (interaction.commandName === 'points') {
     try {
       const res = await api.getMe(interaction.user.id)
-      const webUrl = getWebUrl()
-      const profileUrl = getProfileUrl({
-        discord_id: interaction.user.id,
-        username: res.user.username || interaction.user.username,
-        display_name: res.user.display_name || interaction.user.globalName || interaction.user.username,
-      })
+      const linksRow = buildUserLinksRow(
+        {
+          discord_id: interaction.user.id,
+          username: res.user.username || interaction.user.username,
+          display_name: res.user.display_name || interaction.user.globalName || interaction.user.username,
+        },
+        'My Votes & History',
+      )
       const rankStr = res.user.rank ? `#${res.user.rank}` : 'unranked'
-      const links = [
-        profileUrl ? `👤 [Public Profile](${profileUrl})` : null,
-        webUrl ? `📊 [My Votes & History](${webUrl}/my-votes)` : null,
-      ].filter(Boolean)
-      const webHint = links.length ? `\n${links.join(' · ')}` : ''
       return interaction.reply({
-        content: `You are ranked **${rankStr}** with **${res.user.wins} points** (**${res.user.participations}** rounds played).${webHint}`,
+        content: `You are ranked **${rankStr}** with **${res.user.wins} points** (**${res.user.participations}** rounds played).`,
+        components: linksRow ? [linksRow] : [],
         flags: MessageFlags.Ephemeral,
       })
     } catch (err: any) {
@@ -316,19 +347,17 @@ async function handleButton(interaction: ButtonInteraction) {
       method,
     })
 
-    const webUrl = getWebUrl()
-    const profileUrl = getProfileUrl({
+    const linksRow = buildUserLinksRow({
       discord_id: interaction.user.id,
       username: interaction.user.username,
       display_name: interaction.user.globalName || interaction.user.username,
     })
-    const voteLinks = [
-      profileUrl ? `👤 [Public Profile](${profileUrl})` : null,
-      webUrl ? `📊 [My Votes](${webUrl}/my-votes)` : null,
-    ].filter(Boolean)
-    const fullReply = voteLinks.length ? `${replyText}\n${voteLinks.join(' · ')}` : replyText
 
-    await interaction.reply({ content: fullReply, flags: MessageFlags.Ephemeral })
+    await interaction.reply({
+      content: replyText,
+      components: linksRow ? [linksRow] : [],
+      flags: MessageFlags.Ephemeral,
+    })
     try {
       if (interaction.message.flags?.has(MessageFlags.IsComponentsV2)) {
         await interaction.message.edit(
