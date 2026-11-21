@@ -298,7 +298,8 @@ async function handleButton(interaction: ButtonInteraction) {
     const voteRes = await api.vote({
       prediction_id: prediction.id,
       discord_id: interaction.user.id,
-      username: interaction.user.globalName || interaction.user.username,
+      username: interaction.user.username,
+      display_name: interaction.user.globalName || interaction.user.username,
       avatar: interaction.user.displayAvatarURL(),
       fighter,
       method,

@@ -141,6 +141,7 @@ export class ApiClient {
     prediction_id: number | string
     discord_id: string
     username?: string
+    display_name?: string
     avatar?: string | null
     fighter: 'a' | 'b' | null
     method: 'ko' | 'dec' | 'draw'
