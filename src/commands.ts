@@ -1,9 +1,10 @@
-import { REST, Routes, SlashCommandBuilder } from 'discord.js'
+import { PermissionFlagsBits, REST, Routes, SlashCommandBuilder } from 'discord.js'
 
 export function buildCommands() {
   const predictionCommand = new SlashCommandBuilder()
     .setName('prediction')
     .setDescription('Prediction commands')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageEvents)
     .addSubcommand((sub) =>
       sub
         .setName('start')
@@ -94,7 +95,17 @@ export function buildCommands() {
 
   const leaderboardCommand = new SlashCommandBuilder()
     .setName('leaderboard')
-    .setDescription('Shows the top 10 users.')
+    .setDescription('Shows the top 10 predictors.')
+    .addStringOption((opt) =>
+      opt
+        .setName('sort')
+        .setDescription('Ranking order (default: Fair Rating).')
+        .setRequired(false)
+        .addChoices(
+          { name: 'Fair Rating', value: 'rating' },
+          { name: 'Total Points', value: 'points' },
+        ),
+    )
 
   const pointsCommand = new SlashCommandBuilder()
     .setName('points')

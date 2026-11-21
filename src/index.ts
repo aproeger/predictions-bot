@@ -6,7 +6,6 @@ import {
   ButtonStyle,
   ChatInputCommandInteraction,
   Client,
-  EmbedBuilder,
   Events,
   GatewayIntentBits,
   MessageFlags,
@@ -15,7 +14,10 @@ import {
 import { ApiClient, ApiError } from './api.js'
 import { registerCommands } from './commands.js'
 import {
+  buildActivePredictionsMessagePayload,
   buildEndedMessagePayload,
+  buildLeaderboardMessagePayload,
+  buildPointsMessagePayload,
   buildPredictionEmbed,
   buildPredictionMessagePayload,
   getProfileUrl,
@@ -105,27 +107,16 @@ function buildUserLinksRow(
 async function handleSlashCommand(interaction: ChatInputCommandInteraction) {
   if (interaction.commandName === 'leaderboard') {
     try {
-      const res = await api.getLeaderboard(10)
+      const sortMode =
+        interaction.options.getString('sort') === 'points' ? 'points' : 'rating'
+      const res = await api.getLeaderboard(10, undefined, sortMode)
       if (!res.leaderboard.length) {
         return interaction.reply({
           content: 'No leaderboard entries yet.',
           flags: MessageFlags.Ephemeral,
         })
       }
-      const lines = res.leaderboard.map((u) => {
-        const profileUrl = getProfileUrl(u)
-        const profileLink = profileUrl ? ` · [Profile](${profileUrl})` : ''
-        return `#${u.rank}: <@${u.discord_id}> with **${u.wins} points** (${u.participations} rounds played)${profileLink}`
-      })
-      const webUrl = getWebUrl()
-      const embed = new EmbedBuilder()
-        .setTitle('Predictions Leaderboard')
-        .setDescription(
-          lines.join('\n') +
-            (webUrl ? `\n\n🌐 [Open Full Leaderboard](${webUrl}/leaderboard)` : ''),
-        )
-        .setColor(0xdc3545)
-      return interaction.reply({ embeds: [embed] })
+      return interaction.reply(buildLeaderboardMessagePayload(res.leaderboard, sortMode))
     } catch (err: any) {
       return interaction.reply({
         content: `An error occurred: ${err.message}`,
@@ -145,12 +136,7 @@ async function handleSlashCommand(interaction: ChatInputCommandInteraction) {
         },
         'My Votes & History',
       )
-      const rankStr = res.user.rank ? `#${res.user.rank}` : 'unranked'
-      return interaction.reply({
-        content: `You are ranked **${rankStr}** with **${res.user.wins} points** (**${res.user.participations}** rounds played).`,
-        components: linksRow ? [linksRow] : [],
-        flags: MessageFlags.Ephemeral,
-      })
+      return interaction.reply(buildPointsMessagePayload(res.user, linksRow))
     } catch (err: any) {
       return interaction.reply({
         content: `An error occurred: ${err.message}`,
@@ -262,19 +248,9 @@ async function handleSlashCommand(interaction: ChatInputCommandInteraction) {
         return interaction.editReply('No active predictions found.')
       }
 
-      const lines = [
-        'Active Predictions',
-        'Here are all the currently active predictions and their votes:\n',
-      ]
-      for (const pred of res.docs) {
-        const s = pred.stats!
-        lines.push(`**${pred.fighter_a} vs. ${pred.fighter_b}** [#${pred.id}]`)
-        lines.push(`Total Votes: ${s.total_votes}`)
-        lines.push(`Votes for A: ${s.votes_a} (${Math.round(s.votes_a_percent)}%)`)
-        lines.push(`Votes for B: ${s.votes_b} (${Math.round(s.votes_b_percent)}%)`)
-        lines.push(`Votes for draw: ${s.votes_draw} (${Math.round(s.votes_draw_percent)}%)\n`)
-      }
-      await interaction.editReply(lines.join('\n'))
+      await interaction.editReply(
+        buildActivePredictionsMessagePayload(res.docs, interaction.guildId),
+      )
     } catch (err: any) {
       await interaction.editReply(`An error occurred: ${err.message}`)
     }
@@ -301,22 +277,31 @@ async function handleButton(interaction: ButtonInteraction) {
       const listRes = await api.listPredictions('open', interaction.user.id)
       const matched = listRes.docs.find((p) => String(p.id) === String(prediction.id))
       const myVote = matched?.my_vote
+      const linksRow = buildUserLinksRow({
+        discord_id: interaction.user.id,
+        username: interaction.user.username,
+        display_name: interaction.user.globalName || interaction.user.username,
+      })
       if (!myVote) {
         return interaction.reply({
           content: "You haven't voted in this prediction yet.",
+          components: linksRow ? [linksRow] : [],
           flags: MessageFlags.Ephemeral,
         })
       }
       if (myVote.method === 'draw') {
         return interaction.reply({
-          content: 'You voted for a **draw / no-contest**.',
+          content: 'You voted for a **Draw / No Contest**.',
+          components: linksRow ? [linksRow] : [],
           flags: MessageFlags.Ephemeral,
         })
       }
       const fighterName =
         myVote.fighter === 'a' ? prediction.fighter_a : prediction.fighter_b
+      const methodLabel = myVote.method === 'ko' ? 'KO/TKO' : 'Decision'
       return interaction.reply({
-        content: `You voted for **${fighterName}** by **${myVote.method.toUpperCase()}**.`,
+        content: `You voted for **${fighterName}** by **${methodLabel}**.`,
+        components: linksRow ? [linksRow] : [],
         flags: MessageFlags.Ephemeral,
       })
     } catch (err: any) {
@@ -327,13 +312,14 @@ async function handleButton(interaction: ButtonInteraction) {
   let fighter: 'a' | 'b' | null = null
   let method: 'ko' | 'dec' | 'draw' = 'draw'
   let replyText =
-    'You voted for a **draw / no-contest**. Good luck, you can change your vote as long as the prediction has not been locked.'
+    'You voted for a **Draw / No Contest**. Good luck, you can change your vote as long as the prediction has not been locked.'
 
   if (customId !== 'draw') {
     fighter = customId.startsWith('a') ? 'a' : 'b'
     method = customId.endsWith('ko') ? 'ko' : 'dec'
     const fighterName = fighter === 'a' ? prediction.fighter_a : prediction.fighter_b
-    replyText = `You voted for **${fighterName}** by **${method.toUpperCase()}**. Good luck, you can change your vote as long as the prediction has not been locked.`
+    const methodLabel = method === 'ko' ? 'KO/TKO' : 'Decision'
+    replyText = `You voted for **${fighterName}** by **${methodLabel}**. Good luck, you can change your vote as long as the prediction has not been locked.`
   }
 
   try {

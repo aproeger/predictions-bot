@@ -161,7 +161,7 @@ export class ApiClient {
     })
   }
 
-  getLeaderboard(limit = 10, discordId?: string) {
+  getLeaderboard(limit = 10, discordId?: string, sort: 'rating' | 'points' = 'rating') {
     return this.request<{
       leaderboard: Array<{
         rank: number
@@ -170,9 +170,12 @@ export class ApiClient {
         display_name?: string | null
         wins: number
         participations: number
+        rating?: number
+        avg?: number
       }>
+      sort?: 'rating' | 'points'
     }>('GET', '/predictions-api/leaderboard', {
-      params: { limit: String(limit), discord_id: discordId },
+      params: { limit: String(limit), discord_id: discordId, sort },
     })
   }
 
@@ -184,6 +187,8 @@ export class ApiClient {
         display_name?: string | null
         wins: number
         participations: number
+        rating?: number
+        avg?: number
         rank: number | null
       }
     }>('GET', '/predictions-api/me', {

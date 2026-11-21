@@ -27,11 +27,11 @@ function renderProgressBar(percent: number, filledChar: string, length = 10): st
   return `${filledChar.repeat(filled)}${'⬛'.repeat(empty)}`
 }
 
-function renderModernBar(percent: number, length = 10): string {
+function renderModernBar(percent: number, length = 14): string {
   const clamped = Math.max(0, Math.min(100, Math.round(percent)))
   const filled = Math.round((clamped / 100) * length)
   const empty = length - filled
-  return `\`${'█'.repeat(filled)}${'░'.repeat(empty)}\``
+  return `${'▰'.repeat(filled)}${'▱'.repeat(empty)}`
 }
 
 function formatEventDate(rawDate?: string | null): string {
@@ -191,7 +191,7 @@ export function buildPredictionComponents(
         .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
         .setCustomId('a_dec')
-        .setEmoji('📋')
+        .setEmoji('⚖️')
         .setLabel(truncateLabel(`${fighterA} • Decision`))
         .setStyle(ButtonStyle.Danger),
     ),
@@ -203,7 +203,7 @@ export function buildPredictionComponents(
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
         .setCustomId('b_dec')
-        .setEmoji('📋')
+        .setEmoji('⚖️')
         .setLabel(truncateLabel(`${fighterB} • Decision`))
         .setStyle(ButtonStyle.Primary),
     ),
@@ -280,14 +280,18 @@ function formatMentions(
     display_name?: string | null
     wins: number
   }>,
+  maxDisplay = 20,
 ): string {
-  return winners
-    .map((w) => {
-      const profileUrl = getProfileUrl(w)
-      const link = profileUrl ? ` [↗](${profileUrl})` : ''
-      return `<@${w.discord_id}> (**${w.wins}** pts)${link}`
-    })
-    .join('\n')
+  const shown = winners.slice(0, maxDisplay)
+  const lines = shown.map((w) => {
+    const profileUrl = getProfileUrl(w)
+    const link = profileUrl ? ` [↗](${profileUrl})` : ''
+    return `<@${w.discord_id}> (**${w.wins}** pts)${link}`
+  })
+  if (winners.length > maxDisplay) {
+    lines.push(`*… and ${winners.length - maxDisplay} more on the leaderboard*`)
+  }
+  return lines.join('\n')
 }
 
 export function buildEndedEmbed(
@@ -378,25 +382,26 @@ export function buildPredictionMessagePayload(
   const pctB = Math.round(stats.votes_b_percent)
   const pctDraw = Math.round(stats.votes_draw_percent)
 
+  const totalVotesLabel = `${stats.total_votes} ${stats.total_votes === 1 ? 'vote' : 'votes'}`
   const headerText = new TextDisplayBuilder().setContent(
     [
-      '-# BEYOND KICKBOXING • COMMUNITY PREDICTIONS',
       isLocked
-        ? `## 🔒 ${prediction.fighter_a}  vs.  ${prediction.fighter_b}`
-        : `## 🥊 ${prediction.fighter_a}  vs.  ${prediction.fighter_b}`,
-      `**Event:** ${prediction.event_name || '-'}  •  **Date:** ${formatEventDate(prediction.event_date)}  •  **Votes:** ${stats.total_votes}`,
+        ? '-# BEYOND KICKBOXING • 🔒 VOTING LOCKED'
+        : '-# BEYOND KICKBOXING • 🟢 VOTING OPEN',
+      `## 🥊 ${prediction.fighter_a}  vs.  ${prediction.fighter_b}`,
+      `🎟️ **${prediction.event_name || '-'}**  •  📅 ${formatEventDate(prediction.event_date)}  •  🗳️ ${totalVotesLabel}`,
     ].join('\n'),
   )
 
   const voteLines = [
-    `🔴 **${prediction.fighter_a}**`,
-    `${renderModernBar(pctA)} **${pctA}%** *(${stats.votes_a} ${stats.votes_a === 1 ? 'vote' : 'votes'})*`,
+    `🔴 **${prediction.fighter_a}** — **${pctA}%** *(${stats.votes_a} ${stats.votes_a === 1 ? 'vote' : 'votes'})*`,
+    renderModernBar(pctA),
     '',
-    `🔵 **${prediction.fighter_b}**`,
-    `${renderModernBar(pctB)} **${pctB}%** *(${stats.votes_b} ${stats.votes_b === 1 ? 'vote' : 'votes'})*`,
+    `🔵 **${prediction.fighter_b}** — **${pctB}%** *(${stats.votes_b} ${stats.votes_b === 1 ? 'vote' : 'votes'})*`,
+    renderModernBar(pctB),
     '',
-    `⚪ **Draw / No Contest**`,
-    `${renderModernBar(pctDraw)} **${pctDraw}%** *(${stats.votes_draw} ${stats.votes_draw === 1 ? 'vote' : 'votes'})*`,
+    `⚪ **Draw / No Contest** — **${pctDraw}%** *(${stats.votes_draw} ${stats.votes_draw === 1 ? 'vote' : 'votes'})*`,
+    renderModernBar(pctDraw),
   ]
 
   if (isLocked) {
@@ -456,9 +461,10 @@ export function buildEndedMessagePayload(
   }
 
   const headerLines = [
-    '-# BEYOND KICKBOXING • PREDICTION RESULT',
-    `## 🏁 ${prediction.fighter_a}  vs.  ${prediction.fighter_b}`,
+    '-# BEYOND KICKBOXING • 🏁 FINAL RESULT',
+    `## 🏆 ${prediction.fighter_a}  vs.  ${prediction.fighter_b}`,
     resultLine,
+    ...(settlement ? [`-# 👥 ${settlement.totalParticipants} participants`] : []),
   ]
 
   const container = new ContainerBuilder().setAccentColor(0x10b981)
@@ -503,15 +509,19 @@ export function buildEndedMessagePayload(
 
   const webUrl = getWebUrl()
   if (webUrl) {
-    container.addActionRowComponents(
-      new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setLabel('View Leaderboard & History')
-          .setEmoji('🌐')
-          .setStyle(ButtonStyle.Link)
-          .setURL(`${webUrl}/leaderboard`),
-      ),
-    )
+    container
+      .addSeparatorComponents(
+        new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small),
+      )
+      .addActionRowComponents(
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setLabel('View Leaderboard & History')
+            .setEmoji('🌐')
+            .setStyle(ButtonStyle.Link)
+            .setURL(`${webUrl}/leaderboard`),
+        ),
+      )
   }
 
   container.addTextDisplayComponents(
@@ -523,5 +533,163 @@ export function buildEndedMessagePayload(
   return {
     components: [container],
     flags: MessageFlags.IsComponentsV2 as const,
+  }
+}
+
+export function buildLeaderboardMessagePayload(
+  entries: Array<{
+    rank: number
+    discord_id: string
+    username: string | null
+    display_name?: string | null
+    wins: number
+    participations: number
+    rating?: number
+    avg?: number
+  }>,
+  sortMode: 'rating' | 'points' = 'rating',
+) {
+  const medal = (rank: number) =>
+    rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `**#${rank}**`
+
+  const lines = entries.map((u) => {
+    const profileUrl = getProfileUrl(u)
+    const link = profileUrl ? ` [↗](${profileUrl})` : ''
+    const ratingStr =
+      typeof u.rating === 'number' ? `Rating **${u.rating.toFixed(2)}** · ` : ''
+    return `${medal(u.rank)} <@${u.discord_id}>${link} — ${ratingStr}**${u.wins}** pts *(${u.participations} rounds)*`
+  })
+
+  const sortLabel = sortMode === 'points' ? 'TOTAL POINTS' : 'FAIR RATING'
+  const container = new ContainerBuilder()
+    .setAccentColor(0xdc3545)
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(
+        [
+          `-# BEYOND KICKBOXING • 🏆 TOP 10 BY ${sortLabel}`,
+          '## Predictions Leaderboard',
+        ].join('\n'),
+      ),
+    )
+    .addSeparatorComponents(
+      new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small),
+    )
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(lines.join('\n')))
+
+  const webUrl = getWebUrl()
+  if (webUrl) {
+    const leaderboardUrl =
+      sortMode === 'points' ? `${webUrl}/leaderboard?sort=points` : `${webUrl}/leaderboard`
+    container
+      .addSeparatorComponents(
+        new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small),
+      )
+      .addActionRowComponents(
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setLabel('Open Full Leaderboard')
+            .setEmoji('🌐')
+            .setStyle(ButtonStyle.Link)
+            .setURL(leaderboardUrl),
+        ),
+      )
+  }
+
+  return {
+    components: [container],
+    flags: MessageFlags.IsComponentsV2 as const,
+  }
+}
+
+export function buildPointsMessagePayload(
+  user: {
+    discord_id: string
+    rank: number | null
+    wins: number
+    participations: number
+    rating?: number
+    avg?: number
+  },
+  linksRow: ActionRowBuilder<ButtonBuilder> | null,
+) {
+  const rankStr = user.rank ? `#${user.rank}` : 'Unranked'
+  const ratingStr = typeof user.rating === 'number' ? user.rating.toFixed(2) : '—'
+  const avgStr = typeof user.avg === 'number' ? user.avg.toFixed(2) : '—'
+
+  const container = new ContainerBuilder()
+    .setAccentColor(0xdc3545)
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(
+        [
+          '-# BEYOND KICKBOXING • 🎯 YOUR STATS',
+          `## Rank ${rankStr}`,
+          [
+            `⭐ **Fair Rating:** ${ratingStr}`,
+            `🏆 **Total Points:** ${user.wins}`,
+            `🥊 **Rounds Played:** ${user.participations}`,
+            `📈 **Avg / Round:** ${avgStr}`,
+          ].join('\n'),
+        ].join('\n'),
+      ),
+    )
+
+  if (linksRow) {
+    container
+      .addSeparatorComponents(
+        new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small),
+      )
+      .addActionRowComponents(linksRow)
+  }
+
+  return {
+    components: [container],
+    flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+  }
+}
+
+export function buildActivePredictionsMessagePayload(
+  predictions: PredictionDoc[],
+  guildId?: string | null,
+) {
+  const blocks = predictions.map((pred) => {
+    const s = pred.stats || {
+      votes_a: 0,
+      votes_b: 0,
+      votes_draw: 0,
+      total_votes: 0,
+      votes_a_percent: 0,
+      votes_b_percent: 0,
+      votes_draw_percent: 0,
+    }
+    const jumpUrl =
+      guildId && pred.discord_channel_id && pred.discord_message_id
+        ? ` [Jump to Poll ↗](https://discord.com/channels/${guildId}/${pred.discord_channel_id}/${pred.discord_message_id})`
+        : ''
+
+    return [
+      `**🥊 ${pred.fighter_a} vs. ${pred.fighter_b}** *(#${pred.id})*${jumpUrl}`,
+      `-# 🎟️ ${pred.event_name || '-'} • 📅 ${formatEventDate(pred.event_date)} • 🗳️ ${s.total_votes} votes`,
+      `🔴 ${pred.fighter_a}: **${Math.round(s.votes_a_percent)}%** (${s.votes_a})  ·  🔵 ${pred.fighter_b}: **${Math.round(s.votes_b_percent)}%** (${s.votes_b})  ·  ⚪ Draw: **${Math.round(s.votes_draw_percent)}%** (${s.votes_draw})`,
+    ].join('\n')
+  })
+
+  const container = new ContainerBuilder()
+    .setAccentColor(0xdc3545)
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(
+        [
+          `-# BEYOND KICKBOXING • 🟢 ${predictions.length} ACTIVE ${predictions.length === 1 ? 'PREDICTION' : 'PREDICTIONS'}`,
+          '## Active Predictions',
+        ].join('\n'),
+      ),
+    )
+    .addSeparatorComponents(
+      new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small),
+    )
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(blocks.join('\n\n')))
+
+  return {
+    components: [container],
+    flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
   }
 }
